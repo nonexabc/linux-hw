@@ -27,8 +27,13 @@ vector<string> normal_fucking_split(string input, string delimiter){
 
 int execute(string cmd, char* pdir, bool redirect, string fname, bool erase=false){
     if(cmd.starts_with("silent"s)){
+        if(erase && !fname.empty() && redirect){
+            int fd = open(fname.data(), O_TRUNC);
+            if(fd != -1) close(fd);
+        }
         redirect = true;
         fname = ""s;
+        cmd = cmd.substr(7);
     }
     
     pid_t pid = fork();
