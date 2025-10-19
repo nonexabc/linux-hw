@@ -1,0 +1,9 @@
+total 156
+drwxrwxr-x 2 fedor fedor  4096 Oct 19 17:27 .
+drwxrwxr-x 8 fedor fedor  4096 Oct 19 15:40 ..
+-rwxr-xr-x 1 fedor fedor    37 Oct 19 17:15 7224.log
+-rwxr-xr-x 1 fedor fedor     0 Oct 19 17:27 7536.log
+-rwxrwxr-x 1 fedor fedor 85136 Oct 19 17:13 interactive-shell
+-rw-rw-r-- 1 fedor fedor  1583 Oct 19 17:13 is.cpp
+-rw-rw-r-- 1 fedor fedor 80624 Oct 19 17:13 is.o
+-rw-rw-r-- 1 fedor fedor   249 Oct 19 16:23 Makefile

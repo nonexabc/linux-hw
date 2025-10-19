@@ -1,7 +1,7 @@
 CXX = g++
-EXECS = read-file simple-copy hacker-rm redirect-cin manual-append
-OBJS = read-file.o scp.o hr.o rdc.o ma.o
-CODES = read-file.c scp.c hr.c rdc.cpp ma.cpp
+EXECS = read-file simple-copy hacker-rm redirect-cin manual-append copy
+OBJS = read-file.o scp.o hr.o rdc.o ma.o cpy.o
+CODES = read-file.c scp.c hr.c rdc.cpp ma.cpp cpy.cpp
 
 all: $(EXECS)
 
@@ -34,6 +34,12 @@ manual-append: ma.o
 	
 ma.o:
 	$(CXX) -c ma.cpp -o ma.o
+	
+copy: ma.o
+	$(CXX) cpy.o -o copy
+	
+cpy.o:
+	$(CXX) -c cpy.cpp -o cpy.o
 
 clean:
 	rm -f $(EXECS) $(OBJS)
