@@ -12,11 +12,12 @@
 using namespace std;
 
 void apnd(char* fp){
-    int file = open(fp, O_RDWR);
+    int file = open(fp, O_WRONLY | O_CREAT, 0744);
     checkNeg(file, "couldn't open the specified file");
     int copy = dup(1);
     checkNeg(copy, "couldn't copy stdout");
     checkNeg(dup2(file, 1), "couldn't override stdout");
+    checkNeg(close(file), "couldn't close the file");
     cout << "first line\nsecond line" << endl;
     checkNeg(dup2(copy, 1), "couldn't restore stdout");
 }

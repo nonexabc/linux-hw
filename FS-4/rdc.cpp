@@ -18,7 +18,8 @@ void initialize(int argc, char** argv){
     }
     int file = open(argv[1], O_RDONLY);
     checkNeg(file, "couldn't open from the specified file");
-    dup2(file, 0);
+    checkNeg(dup2(file, 0), "couldn't redirect stdin");
+    checkNeg(close(file), "couldn't close the file");
 }
 
 int main(int argc, char** argv){
