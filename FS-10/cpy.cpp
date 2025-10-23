@@ -19,20 +19,28 @@ void cpy(char* srcfp, char* destfp){
     
     char* buff = new char[BUFFSZ];
     off_t pos = 0;
+    long dataBytes = 0;
+    long holeBytes = 0;
+    bool holeEnd = false;
+
     while(true){
         auto dataStart = lseek(src, pos, SEEK_DATA);
         if (dataStart == -1) {
-            if (errno == ENXIO) break;
+            if (errno == ENXIO){
+                holeEnd = true; 
+                break;
+            }
             checkNeg(-1, "seek_data failed");
         }
         if(dataStart > pos){
             auto skip = dataStart - pos;
             lseek(dest, skip, SEEK_CUR);
             pos += skip;
+            holeBytes += skip;
             continue;
         }
         auto holeStart = lseek(src, pos, SEEK_HOLE);
-        if (dataStart == -1) {
+        if (holeStart == -1) {
             if (errno == ENXIO) holeStart = pos + BUFFSZ;
             else checkNeg(-1, "seek_hole failed");
         }
@@ -43,13 +51,20 @@ void cpy(char* srcfp, char* destfp){
         if(bytes == 0) break;
         checkNeg(bytes, "couldn't read from the source file");
         checkNeg(write(dest, buff, bytes), "couldn't write to the destination file");
+        dataBytes += bytes;
         pos += bytes;
-        lseek(src, pos, SEEK_SET);
+    }
+    if(holeEnd){
+        off_t end = lseek(src, 0, SEEK_END);
+        holeBytes += end - pos;
+        ftruncate(dest, end);
     }
 
     checkNeg(close(src), "couldn't close the source file");
     checkNeg(close(dest), "couldn't close the destination file");
     delete [] buff;
+
+    cout << "Successfully copied " << (dataBytes + holeBytes) << " bytes (data: " << dataBytes << ", hole: " << holeBytes << ")" << endl;
 }
 
 int main(int argc, char** argv){
@@ -58,6 +73,5 @@ int main(int argc, char** argv){
         exit(0);
     }
     cpy(argv[1], argv[2]);
-    cout << "copied successfully" << endl;
     return 0;
 }
