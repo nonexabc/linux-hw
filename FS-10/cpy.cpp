@@ -13,14 +13,14 @@ using namespace std;
 
 void cpy(char* srcfp, char* destfp){
     int src = open(srcfp, O_RDONLY);
-    checkNeg(file, "couldn't open the source file");
+    checkNeg(src, "couldn't open the source file");
     int dest = open(srcfp, O_WRONLY);
-    checkNeg(file, "couldn't open/create the destination file");
+    checkNeg(dest, "couldn't open/create the destination file");
 }
 
 int main(int argc, char** argv){
     if(argc != 3){
-        cerr << args[0] << " requires 2 args: source and destination paths" << endl;
+        cerr << argv[0] << " requires 2 args: source and destination paths" << endl;
         exit(0);
     }
     cpy(argv[1], argv[2]);
