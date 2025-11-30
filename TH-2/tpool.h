@@ -6,12 +6,13 @@
 #include <queue>
 #include <stdexcept>
 #include <mutex>
+#include <chrono>
+#include <thread>
 
 struct thread_task{
     void* (*func)(void*);
     void* arg;
 };
-
 
 class parallel_scheduler {
     private:
@@ -19,23 +20,23 @@ class parallel_scheduler {
         pthread_t* _threads;
         std::queue<thread_task> _tasks;
         std::mutex _mutex;
+        bool _stop = false;
+        unsigned short _sleepMillis;
 
-        void _onFreed();
-        void _dispatch();
+        void _lock();
+        void _unlock();
 
     public:
-        parallel_scheduler(size_t capacity);
+        parallel_scheduler(size_t capacity, unsigned short sleepMillis = 10);
         ~parallel_scheduler();
         void run(void* (*func)(void*), void* arg);
 
-        friend void* launch_wrapper(void* largs);
+        void stop();
+        void waitForCompletion();
+
+        friend void* _worker(void* arg);
 };
 
-void* launch_wrapper(void* largs);
-
-struct launch_args{
-    thread_task task;
-    parallel_scheduler* instance;
-};
+void* _worker(void* arg);
 
 #endif

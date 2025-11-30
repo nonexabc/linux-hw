@@ -1,69 +1,68 @@
 #include "tpool.h"
 
-void parallel_scheduler::_onFreed(){
+void parallel_scheduler::_lock(){
     _mutex.lock();
-    int tid = pthread_self();
-    for(size_t i=0; i<_cap; ++i){
-        if(_threads[i] == tid){
-            pthread_join(tid, NULL);
-            _threads[i] = -1;
-            _dispatch();
-            _mutex.unlock();
-            return;
-        }
-    }
-    throw std::runtime_error("Thread not found");
 }
 
-void parallel_scheduler::_dispatch(){
-    std::cout << "starting to dispatch" << std::endl;
-    if(_tasks.size() == 0) {
-        _mutex.unlock();
-        return;
-    };
-    auto task = _tasks.front();
-    for(size_t i=0; i<_cap; ++i){
-        if(_threads[i] == -1){ // doesn't exist / free
-            launch_args largs{task, this};
-            _tasks.pop();
-            pthread_create(&_threads[i], NULL, launch_wrapper, &largs);
-            if(_threads[i] == -1) throw std::runtime_error("Failed to create a thread");
-            return;
-        }
-    }
+void parallel_scheduler::_unlock(){
+    _mutex.unlock();
 }
 
-parallel_scheduler::parallel_scheduler(size_t capacity){
+parallel_scheduler::parallel_scheduler(size_t capacity, unsigned short sleepMillis) {
     _threads = new pthread_t[capacity];
+    _sleepMillis = sleepMillis;
     _cap = capacity;
     for(size_t i=0; i<capacity; ++i){
-        _threads[i] = -1;
+        pthread_create(&_threads[i], NULL, _worker, this);
     }
 }
 parallel_scheduler::~parallel_scheduler() {
-    _mutex.lock();
-    delete [] _threads;
+    _lock();
+    _stop = true;
     for(size_t i=0; i<_cap; ++i){
         if(_threads[i] != -1){
             pthread_join(_threads[i], NULL);
         }
     }
-    _mutex.unlock();
+    delete [] _threads;
+    _unlock();
 }
 
 void parallel_scheduler::run(void* (*func)(void*), void* arg) {
     thread_task task{func, arg};
-    _mutex.lock();
+    _lock();
     _tasks.push(task);
     std::cout << "scheduling task. current size - " << _tasks.size() << std::endl;
-    _dispatch();
-    _mutex.unlock();
+    _unlock();
 }
 
-void* launch_wrapper(void* largs) {
-    launch_args* args = (launch_args*) largs;
-    thread_task task = args->task;
-    void* res = task.func(task.arg);
-    args->instance->_onFreed();
-    return res;
+void parallel_scheduler::stop(){
+    _stop = true;
+}
+
+void parallel_scheduler::waitForCompletion(){
+    _lock();
+    while(!_tasks.empty()){
+        _unlock();
+        std::this_thread::sleep_for(std::chrono::milliseconds(_sleepMillis*5));
+        _lock();
+    }
+    _unlock();
+}
+
+void* _worker(void* arg){
+    parallel_scheduler* scheduler = (parallel_scheduler*) arg;
+    while(!(scheduler->_stop)){
+        scheduler->_lock();
+        if(!(scheduler->_tasks.empty())){
+            thread_task task = scheduler->_tasks.front();
+            scheduler->_tasks.pop();
+            scheduler->_unlock();
+            task.func(task.arg);
+        }else{
+            scheduler->_unlock();
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(scheduler->_sleepMillis));
+    }
+    return nullptr;
 }

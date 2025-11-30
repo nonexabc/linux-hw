@@ -32,10 +32,10 @@ void* testFunc3(void* arg){
 }
 
 int main(){
-    parallel_scheduler scheduler(5);
+    parallel_scheduler scheduler(10);
     int i = 0;
-    test_args* args = new test_args[30];
-    for(; i<30; i+=3){
+    test_args* args = new test_args[90];
+    for(; i<87; i+=3){
         args[i].task_id = i;
         args[i+1].task_id = i+1;
         args[i+2].task_id = i+2;
@@ -43,5 +43,7 @@ int main(){
         scheduler.run(testFunc2, &args[i+1]);
         scheduler.run(testFunc3, &args[i+2]);
     }
+    scheduler.waitForCompletion();
+    delete [] args;
     return 0;
 }
