@@ -7,9 +7,12 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <atomic>
 #include <cerrno>
 #include <cstring>
 #include <iostream>
+#include <map>
+#include <mutex>
 #include <stdexcept>
 #include <vector>
 
@@ -17,62 +20,127 @@ using namespace std;
 
 #define BUFFSZCCLI 4096
 
-bool isRunning = true;
-string username;
-
 int checkNeg(int var) {
-  if (var < 0) {
+  if (var == -1) {
     throw runtime_error(string("something went wrong: ") + strerror(errno));
   }
   return var;
 }
 
-void* receiverThread(void* arg) {
-  int conn = (int)((int64_t)arg);
-  char buff[BUFFSZCCLI];
-  ssize_t n;
-  while (isRunning && (n = recv(conn, buff, sizeof(buff), 0)) > 0) {
-    cout << buff << endl;
-    memset(buff, 0, sizeof(buff));
+class ChatClient {
+ private:
+  int _sock = -1;
+  atomic<bool> _running = true;
+  string _username;
+  pthread_t _receiverThread;
+  void (*_onServerStop)() = nullptr;
+  bool _serverStopped = false;
+
+  void _sendToServer(const string& msg) {
+    checkNeg(send(_sock, msg.data(), msg.size(), 0));
   }
-  isRunning = false;
-  cout << "connection closed" << endl;
-  return NULL;
+
+  void _onDisconnect() { stop(false); }
+
+  void _processMessage(const string& msg) {
+    if (msg[0] == '/') {
+      if (msg == "/exit") {
+        _running = false;
+        _serverStopped = true;
+        return;
+      }
+      cout << "Command: " << msg << endl;
+    } else {
+      cout << msg << endl;
+    }
+  }
+
+  static void* _receiver(void* arg) {
+    ChatClient* client = (ChatClient*)arg;
+    char buff[BUFFSZCCLI];
+    ssize_t n;
+    string msg;
+    while (client->_running &&
+           (n = recv(client->_sock, buff, sizeof(buff), 0)) > 0) {
+      msg = string(buff, n);
+      client->_processMessage(msg);
+    }
+    client->_onDisconnect();
+    return NULL;
+  }
+
+ public:
+  ChatClient(int port, in_addr_t address) {
+    _sock = checkNeg(socket(AF_INET, SOCK_STREAM, 0));
+    struct sockaddr_in addr = {0};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(address);
+    addr.sin_port = htons(port);
+    checkNeg(connect(_sock, (struct sockaddr*)&addr, sizeof(addr)));
+  }
+
+  ~ChatClient() { stop(); }
+
+  void run() { pthread_create(&_receiverThread, NULL, _receiver, (void*)this); }
+
+  void stop(bool stopReceiver = true) {
+    _running = false;
+    if (_serverStopped && _onServerStop) {
+      cout << "The server stopped" << endl;
+      _onServerStop();
+    }
+    if (_sock != -1) {
+      checkNeg(shutdown(_sock, SHUT_RDWR));
+      checkNeg(close(_sock));
+      _sock = -1;
+    }
+    if (stopReceiver && _receiverThread > 0) {
+      checkNeg(pthread_join(_receiverThread, NULL));
+      _receiverThread = -1;
+    }
+    cout << "Client stopped gracefully" << endl;
+  }
+
+  void onServerStop(void (*func)()) { _onServerStop = func; }
+
+  void setName(const string& name) {
+    _username = name;
+    _sendToServer("/setname " + name);
+  }
+
+  void sendMessage(const string& msg) { _sendToServer(msg); }
+
+  bool isRunning() const { return _running; }
+};
+
+static ChatClient* cli = nullptr;
+
+void handler(int) {
+  cli->stop();
+  exit(0);
 }
 
-void client() {
-  int sock = checkNeg(socket(AF_INET, SOCK_STREAM, 0));
-
-  struct sockaddr_in addr = {0};
-  addr.sin_family = AF_INET;
-  addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-  addr.sin_port = htons(8080);
-
-  checkNeg(connect(sock, (struct sockaddr*)&addr, sizeof(addr)));
-  cout << "What's your name?" << endl;
-  cin >> username;
-  string req = "/setname " + username;
-  send(sock, req.data(), req.size(), 0);
-  cout << "Connected to the server" << endl;
-
-  string message;
-  ssize_t n;
-
-  pthread_t thread;
-  checkNeg(pthread_create(&thread, NULL, receiverThread, (void*)sock));
-  while (isRunning) {
-    cout << "> ";
-    getline(cin, message);
-    if (message == "/exit") break;
-    checkNeg(send(sock, message.data(), message.size(), 0));
-  }
-  isRunning = false;
-  close(sock);
-  cout << "exiting" << endl;
-  pthread_join(thread, NULL);
+void killStdin() {
+  close(STDIN_FILENO);
+  kill(getpid(), SIGSTOP);
 }
 
 int main() {
-  client();
+  cli = new ChatClient(8000, INADDR_LOOPBACK);
+  signal(SIGINT, handler);
+  cli->onServerStop(killStdin);
+  cli->run();
+  string msg;
+  cout << "What's your name?" << endl;
+  getline(cin, msg);
+  cli->setName(msg);
+  while (cli->isRunning()) {
+    getline(cin, msg);
+    cli->sendMessage(msg);
+    if (msg == "/exit") {
+      cli->stop();
+      break;
+    }
+  }
   return 0;
 }
