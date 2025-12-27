@@ -43,6 +43,8 @@ class ChatServer {
   vector<pthread_t> _workerThreads;
   atomic<bool> _running = true;
   mutex _mutex;
+  int _outputFd = STDOUT_FILENO;
+  bool _printMessages = false;
 
   void _sendTo(int conn, const string& msg) {
     auto res = send(conn, msg.data(), msg.size(), 0);
@@ -56,6 +58,10 @@ class ChatServer {
       lock_guard<mutex> lock(_mutex);
       for (int i = 0; i < _conns.size(); i++) {
         _sendTo(_conns[i], msg);
+      }
+      if (_printMessages) {
+        write(_outputFd, msg.data(), msg.size());
+        write(_outputFd, "\n", 1);
       }
     }
   }
@@ -170,6 +176,11 @@ class ChatServer {
 
     cout << "Server stopped gracefully" << endl;
   }
+
+  void printMessages(bool enable, int outputFd = STDOUT_FILENO) {
+    _printMessages = enable;
+    _outputFd = outputFd;
+  }
 };
 
 static ChatServer* srv = nullptr;
@@ -182,12 +193,15 @@ void handler(int) {
 int main() {
   signal(SIGINT, handler);
   srv = new ChatServer(8000, INADDR_LOOPBACK, SOMAXCONN);
+  int fd = open("chat.log", O_WRONLY | O_CREAT | O_APPEND, 0755);
+  srv->printMessages(true, fd);
   srv->run();
   string cmd;
   while (true) {
     cin >> cmd;
     if (cmd == "/exit") break;
   }
+  close(fd);
   srv->stop();
   delete srv;
 
